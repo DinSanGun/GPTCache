@@ -130,7 +130,7 @@ def main():
     ap.add_argument("--csv", nargs="+", required=True, help="List of CSV files to visualize (detail.csv or summary.csv).")
     ap.add_argument("--labels", nargs="*", default=None, help="Optional labels matching the CSV order.")
     ap.add_argument("--out", default="plots", help="Output directory for images.")
-    ap.add_argument("--sys-csv", default=None, help="Optional sys_detail.csv to plot CPU/memory.")
+    #ap.add_argument("--sys-csv", default=None, help="Optional sys_detail.csv to plot CPU/memory.")
     args = ap.parse_args()
 
     outdir = Path(args.out)
@@ -146,9 +146,16 @@ def main():
     plot_throughput(datasets, outdir)
     plot_hit_rate(datasets, outdir)
 
-    # Optional system timeseries
-    if args.sys_csv:
-        plot_sys_timeseries(Path(args.sys_csv), outdir)
+    # Always try to plot CPU/RAM for any run dir that has sys_detail.csv
+    seen = set()
+    for _, df in datasets:
+        pass  # keep datasets for other plots
+    for csv_path in args.csv:
+        run_dir = Path(csv_path).parent
+        sys_csv = run_dir / "sys_detail.csv"
+        if sys_csv.exists() and sys_csv not in seen:
+            plot_sys_timeseries(sys_csv, outdir)
+            seen.add(sys_csv)
 
     print(f"Saved plots in: {outdir.resolve()}")
 
