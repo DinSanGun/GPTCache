@@ -1,0 +1,35 @@
+mode: ollama
+paths:
+  out_dir: results/run-real-llama1b-baseline
+  artifacts_dir: results/artifacts-baseline
+  reset_artifacts: true 
+
+cache:
+  type: semantic
+  max_size: 1
+  clean_size: 1
+  eviction: LRU
+  similarity: distance
+  similarity_threshold: 0.10 
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3.2:1b"
+  timeout_s: 120
+  keep_alive: "1m"
+  options:
+    num_ctx: 1024
+    num_predict: 128
+
+run:
+  prompts_file: "data/prompts_mixed.txt"
+  prompts: 10
+  warm_repeats: 1
+  prompt_prefix: "capital of country "
+  similar_every: 0              # no near-duplicates
+  shuffle_warm: False
+
+metrics:
+  sample_interval_ms: 300
+  print_every: 1
+

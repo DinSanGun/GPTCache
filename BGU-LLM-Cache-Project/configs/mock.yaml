@@ -1,17 +1,19 @@
-# Mock configuration
 mode: mock
 paths:
   out_dir: results/run-mock
   artifacts_dir: results/artifacts
 cache:
-  type: semantic           # start with exact for speed; switch to semantic later
+  type: semantic
   max_size: 5
   clean_size: 2
   eviction: LRU
   similarity: distance
+  similarity_threshold: 0.35
 run:
   prompts: 12
   warm_repeats: 1
   prompt_prefix: "mock question #"
+  similar_every: 2
+  similar_suffix: " please"
 metrics:
   sample_interval_ms: 300

@@ -1,0 +1,38 @@
+mode: ollama
+paths:
+  out_dir: results/run-real-llama1b-evict
+  artifacts_dir: results/artifacts
+  reset_artifacts: true 
+
+cache:
+  type: semantic
+  max_size: 8       # force evictions
+  clean_size: 4
+  eviction: LRU
+  similarity: distance
+  similarity_threshold: 0.10
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3.2:1b"
+  timeout_s: 120
+  keep_alive: "1m"
+  options:
+    num_ctx: 1024
+    num_predict: 128
+
+run:
+  prompts: 30
+  warm_repeats: 1
+  prompt_prefix: "capital of country "
+  similar_every: 0
+  shuffle_warm: true            # randomize warm order ⇒ more realistic evictions
+
+metrics:
+  sample_interval_ms: 300
+  print_every: 1
+
+paths:
+  out_dir: results/run-real-llama1b-baseline   # or -evict, etc.
+  artifacts_dir: results/artifacts-baseline    # <- make this unique per config
+  reset_artifacts: true                        # <- NEW
