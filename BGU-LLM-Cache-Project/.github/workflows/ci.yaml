@@ -1,0 +1,36 @@
+name: BGU-LLM-Cache-Project-ci
+on:
+  push:
+    paths:
+      - 'BGU-LLM-Cache-Project/**'
+  pull_request:
+    paths:
+      - 'BGU-LLM-Cache-Project/**'
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        working-directory: BGU-LLM-Cache-Project
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+      - name: Unit tests
+        working-directory: BGU-LLM-Cache-Project
+        run: |
+          pytest -q
+      - name: Smoke benchmark (mock)
+        working-directory: BGU-LLM-Cache-Project
+        run: |
+          python -m src.bench.runner --config configs/mock.yaml
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: BGU-LLM-Cache-Project/results/**

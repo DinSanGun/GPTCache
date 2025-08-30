@@ -1,0 +1,22 @@
+# Real/Ollama configuration
+mode: ollama
+ollama:
+  base_url: "http://127.0.0.1:11434"
+  model: "phi3:mini"
+  timeout_s: 60
+paths:
+  out_dir: results/run-real
+  artifacts_dir: results/artifacts
+cache:
+  type: semantic
+  max_size: 100
+  clean_size: 20
+  eviction: LRU
+  similarity: distance
+  onnx_model: null
+run:
+  prompts: 20
+  warm_repeats: 1
+  prompt_prefix: "Say one fun fact about: "
+metrics:
+  sample_interval_ms: 300
