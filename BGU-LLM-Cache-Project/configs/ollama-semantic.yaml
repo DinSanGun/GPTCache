@@ -1,0 +1,29 @@
+mode: ollama
+ollama:
+  base_url: "http://localhost:11434"  # or your remote URL
+  model: "llama3.2:1b"                # pick your model
+  timeout_s: 60
+  options: {}
+  keep_alive: "5m"
+
+cache:
+  type: semantic
+  eviction: COST_AWARE        # overridden per run by bench_policies.py
+  max_size: 4
+  clean_size: 1
+  similarity: distance
+  similarity_threshold: 0.98
+  cost_metric: latency_ms
+  cost_decay: 0.0
+
+paths:
+  artifacts_dir: results/ollama/artifacts  # overridden per-run
+  out_dir: results/ollama/run              # overridden per-run
+  reset_artifacts: true
+
+run:
+  warm_repeats: 1
+  shuffle_warm: true
+  strict_cold: true
+  prompts_file: "data/lmsys_user_prompts_en_200k_max480.txt"
+
