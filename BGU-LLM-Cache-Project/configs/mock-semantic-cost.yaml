@@ -17,4 +17,4 @@ run:
   warm_repeats: 1
   reverse_warm: true
   strict_cold: true
-  prompts_file: "data/prompts_mixed.txt"   
+  # prompts_file: "data/prompts_mixed.txt"   

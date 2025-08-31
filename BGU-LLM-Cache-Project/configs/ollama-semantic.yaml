@@ -25,5 +25,5 @@ run:
   warm_repeats: 1
   shuffle_warm: true
   strict_cold: true
-  prompts_file: "data/lmsys_user_prompts_en_200k_max480.txt"
+  prompts_file: "data/lmsys_user_prompts.txt"
 
