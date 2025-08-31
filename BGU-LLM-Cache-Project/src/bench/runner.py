@@ -185,9 +185,6 @@ def main():
         rows.append({"prompt": p, "phase": "cold", "lat_ms": lat, "hit": int(hit)})
 
 
-    print("[DEBUG] stored items:", len(GLOBAL_CACHE.data_manager.s.get_ids(deleted=False)))
-
-
     # ---- WARM PASS(ES) ----
     for r in range(warm_repeats):
         warm_order = base_prompts[:]

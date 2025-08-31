@@ -10,14 +10,13 @@ ollama:
     num_ctx: 1024
     num_predict: 128
 cache:
-  type: semantic
+  type: exact
   eviction: LRU
   max_size: 4
   clean_size: 2
   similarity: distance       
-  similarity_threshold: 0.95      # identical ≈ 1.0 ⇒ HIT
 paths:
-  artifacts_dir: results/artifacts-semantic-pos
+  artifacts_dir: results/real-exact
   reset_artifacts: true
 run:
   strict_cold: true
