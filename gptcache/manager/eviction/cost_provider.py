@@ -1,4 +1,3 @@
-
 """
 Lets the eviction policy look up cost by id, without passing functions through the factory. 
 The benchmark sets this hook at runtime
