@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 import pandas as pd
 import yaml
 from gptcache.adapter.api import get as cache_get, put as cache_put
+from gptcache import cache as GLOBAL_CACHE
 from .metrics import SysSampler, percentiles
 from .cache_setup import init_cache
 
@@ -81,6 +82,9 @@ def main():
         onnx_model=cache_cfg.get("onnx_model", None),
         similarity_threshold=float(cache_cfg.get("similarity_threshold", 0.3)),
     )
+
+    print(f"[cfg] loading: {Path(args.config).resolve()}")
+    print(f"[cfg] mode = {mode}")
 
     # Choose model
     if mode == "mock":
@@ -181,17 +185,26 @@ def main():
         rows.append({"prompt": p, "phase": "cold", "lat_ms": lat, "hit": int(hit)})
 
 
+    print("[DEBUG] stored items:", len(GLOBAL_CACHE.data_manager.s.get_ids(deleted=False)))
+
+
     # ---- WARM PASS(ES) ----
     for r in range(warm_repeats):
         warm_order = base_prompts[:]
+        if run.get("reverse_warm", False):
+            warm_order = list(reversed(warm_order))
         if shuffle_warm:
             random.shuffle(warm_order)
         for idx, p in enumerate(warm_order, start=1):
             print(f"[warm{r+1}] {idx}/{len(warm_order)} prompt: {p}", flush=True)
             s = time.perf_counter()
-            _ans, hit = infer_with_cache(p)
+            ans, hit = infer_with_cache(p)
             e = time.perf_counter()
             lat = (e - s) * 1000.0
+
+            preview = (str(ans) or "")[:160].replace("\n", " ")
+            print(f"[warm{r+1}] {idx}/{len(warm_order)} {'HIT' if hit else 'MISS'}  {lat:.1f} ms | {p!r} -> {preview}", flush=True)
+            
             rows.append({"prompt": p, "phase": f"warm{r+1}", "lat_ms": lat, "hit": int(hit)})
             if (idx % print_every == 0) or (idx == len(warm_order)):
                 print(f"[warm{r+1}] processed {ordinal(idx)} prompt ({idx}/{len(warm_order)})", flush=True)

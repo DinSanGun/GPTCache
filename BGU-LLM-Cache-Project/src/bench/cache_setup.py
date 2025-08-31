@@ -1,58 +1,59 @@
-from __future__ import annotations
 from pathlib import Path
-from typing import Literal, Optional
-
 from gptcache import cache as GLOBAL_CACHE, Config
-from gptcache.adapter.api import init_similar_cache
-from gptcache.embedding import Onnx
 from gptcache.manager import get_data_manager, CacheBase, VectorBase
+from gptcache.embedding import Onnx
+from gptcache.processor.pre import get_prompt
 from gptcache.similarity_evaluation.distance import SearchDistanceEvaluation
+from gptcache.similarity_evaluation.exact_match import ExactMatchEvaluation
 
 def init_cache(
     artifacts_dir: Path,
-    cache_type: Literal["exact","semantic"] = "semantic",
+    cache_type: str = "semantic",      # "semantic" or "exact"
     max_size: int = 5,
     clean_size: int = 2,
-    eviction: Literal["LRU","FIFO"] = "LRU",
-    similarity: Literal["distance","cosine","exact"] = "distance",
-    onnx_model: Optional[str] = None,
-    similarity_threshold: float = 0.3,
+    eviction: str = "LRU",
+    similarity: str = "distance",      
+    similarity_threshold: float = 0.05,
+    onnx_model: str | None = None
 ):
-    """Initialize GPTCache.
-    For semantic mode, this sets up the adapter API so cache_get/cache_put work.
-    """
+
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     sqlite_path = artifacts_dir / "sqlite.db"
     faiss_path = artifacts_dir / "faiss.index"
 
-    if cache_type == "exact":
-        dm = get_data_manager(
-            CacheBase("sqlite", sql_url=f"sqlite:///{sqlite_path}"),
-            max_size=max_size, clean_size=clean_size, eviction=eviction,
-        )
-        GLOBAL_CACHE.init(data_manager=dm)
-        return sqlite_path, None
-
-    # semantic mode
-    onnx = Onnx(model=onnx_model) if onnx_model else Onnx()
-    dim = onnx.dimension
+    emb = Onnx(model=onnx_model) if onnx_model else Onnx()
+    dim = emb.dimension
 
     dm = get_data_manager(
-        CacheBase("sqlite", sql_url=f"sqlite:///{sqlite_path}"),
-        VectorBase("faiss", index_path=str(faiss_path), dimension=dim),
-        max_size=max_size, clean_size=clean_size, eviction=eviction,
+        cache_base=CacheBase("sqlite", sql_url=f"sqlite:///{sqlite_path}"),
+        vector_base=VectorBase("faiss", index_path=str(faiss_path), dimension=dim),
+        max_size=max_size,
+        clean_size=clean_size,
+        eviction=eviction,
     )
 
-    evaluation = SearchDistanceEvaluation()
-    init_similar_cache(
-        cache_obj=GLOBAL_CACHE,
+
+    sim = (similarity or "distance").lower()
+    if cache_type == "exact" or sim == "exact":
+        evaluator = ExactMatchEvaluation()
+        thr = 1.0  # require exact string match
+    elif sim in ("distance_pos", "distance-positive"):
+        # Map distance -> similarity in [0..1]; higher = better
+        evaluator = SearchDistanceEvaluation(max_distance=20.0, positive=True)
+        # Use a HIGH threshold (0.85–0.98). Identical -> score≈1.0 -> HIT
+        thr = float(similarity_threshold)
+    else:
+        # Raw distance; smaller = better (older GPTCache default)
+        evaluator = SearchDistanceEvaluation(max_distance=20.0, positive=False)
+        # Use a SMALL threshold (e.g., 0.001–0.05). Identical -> distance≈0 -> HIT
+        thr = float(similarity_threshold)
+
+    GLOBAL_CACHE.init(
+        pre_embedding_func=get_prompt,
+        embedding_func=emb.to_embeddings,              # keep embeddings so FAISS always gets numeric vectors
         data_manager=dm,
-        embedding=onnx,
-        evaluation=evaluation,
-        config=Config(similarity_threshold=float(similarity_threshold)),
+        similarity_evaluation=evaluator,
+        config=Config(similarity_threshold=thr),
     )
+    print(f"[init] similarity={sim} thr={thr}")
 
-    print(f"[init] sqlite: {sqlite_path.resolve()}")
-    print(f"[init] faiss : {faiss_path.resolve()}")
-
-    return sqlite_path, faiss_path

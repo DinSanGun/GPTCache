@@ -3,11 +3,11 @@ Translate "Good morning, how are you?" to French.
 Calculate 37 * 19 and explain briefly.
 Sort the list: [pear, banana, apple, mango] alphabetically.
 Write a Python one-liner to reverse a string.
-Give a fun fact about octopuses in 20 words.
 What is the derivative of x^3 + 2x at x=4?
 Rewrite this more formally: "We gotta hurry or we'll be late."
 Generate a JSON with keys name, age, city for an imaginary person.
 Explain the difference between TCP and UDP in two sentences.
+Give a fun fact about octopuses in 20 words.
 Provide the capital of Japan.
 Provide the capital of Brazil.
 Provide the capital of Canada.
