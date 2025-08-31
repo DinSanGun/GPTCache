@@ -12,7 +12,7 @@ mode: mock
 cache:
   type: semantic
   eviction: LRU
-  max_size: 4
+  max_size: 5
   clean_size: 2
   similarity: distance       
   similarity_threshold: 0.95      # identical ≈ 1.0 ⇒ HIT
@@ -23,4 +23,4 @@ run:
   strict_cold: true
   prompts_file: "data/prompts_mixed.txt"
   warm_repeats: 1
-  shuffle_warm: true
+  reverse_warm: true

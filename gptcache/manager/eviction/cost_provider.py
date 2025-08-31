@@ -1,20 +1,19 @@
 """
-Lets the eviction policy look up cost by id, without passing functions through the factory. 
-The benchmark sets this hook at runtime
+Global hook so eviction policy can ask: cost for this cache-id?
+Your bench sets this at runtime with set_provider function
 """
-from typing import Callable
+from typing import Callable, Optional
 
-_provider: Callable[[int], float] | None = None
+_Provider: Optional[Callable[[int], float]] = None
 
 def set_provider(fn: Callable[[int], float]) -> None:
-    global _provider
-    _provider = fn
+    global _Provider
+    _Provider = fn
 
 def get_cost(cache_id: int) -> float:
-    if _provider is None:
-        # Neutral default (never prefer to evict if unknown, treat it as "high")
+    if _Provider is None:
         return float("inf")
     try:
-        return float(_provider(int(cache_id)))
+        return float(_Provider(int(cache_id)))
     except Exception:
         return float("inf")

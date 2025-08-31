@@ -10,6 +10,10 @@ from gptcache import cache as GLOBAL_CACHE
 from .metrics import SysSampler, percentiles
 from .cache_setup import init_cache
 
+from ..ext.cost_aware import record_mapping, record_cost_by_id, cost_for_prompt
+from gptcache.manager.eviction.cost_inbox import pop_last as pop_inserted_key
+
+
 
 
 def ordinal(n: int) -> str:
@@ -49,6 +53,8 @@ def main():
     paths = cfg.get("paths", {})
     run = cfg.get("run", {})
     metrics_cfg = cfg.get("metrics", {})
+    cost_metric = str(cfg.get("cache", {}).get("cost_metric", "latency_ms")).lower()
+
 
     out_dir = Path(paths.get("out_dir", "results/run"))
     artifacts_dir = Path(paths.get("artifacts_dir", "results/artifacts"))
@@ -168,20 +174,43 @@ def main():
     sampler.start()
     t0 = time.time()
     rows: List[Dict[str, Any]] = []
+    total_cost_saved: float = 0.0
 
     # ---- COLD PASS ----
     for idx, p in enumerate(base_prompts, start=1):
         print(f"[cold] {idx}/{len(base_prompts)} prompt: {p}", flush=True)
         s = time.perf_counter()
+
         if strict_cold:
             # do NOT query cache on first pass; seed it for warm pass
             ans = infer_raw(p)
             cache_put(p, ans)
             hit = False
+
+            # NEW: capture the inserted cache id without any DB calls
+            new_id = pop_inserted_key()
+            if new_id is not None:
+                record_mapping(p, int(new_id))
+                observed = float((time.perf_counter() - s) * 1000.0) if cost_metric == "latency_ms" else float(len(str(ans)) // 4)
+                record_cost_by_id(int(new_id), observed)
         else:
             ans, hit = infer_with_cache(p)
+            if not hit:
+                # Miss → a put just happened inside infer_with_cache; grab that id
+                new_id = pop_inserted_key()
+                if new_id is not None:
+                    record_mapping(p, int(new_id))
+                    # use measured latency below once we compute it
+                    pass
+
         e = time.perf_counter()
         lat = (e - s) * 1000.0
+
+        # If we missed in the non-strict path, record cost now that we know lat
+        if not hit and not strict_cold:
+            observed = float(lat) if cost_metric == "latency_ms" else float(len(str(ans)) // 4)
+            record_cost_by_id(int(new_id), observed)  # new_id may be None if something unusual happened; safe to ignore
+
         rows.append({"prompt": p, "phase": "cold", "lat_ms": lat, "hit": int(hit)})
 
 
@@ -192,19 +221,34 @@ def main():
             warm_order = list(reversed(warm_order))
         if shuffle_warm:
             random.shuffle(warm_order)
+
         for idx, p in enumerate(warm_order, start=1):
             print(f"[warm{r+1}] {idx}/{len(warm_order)} prompt: {p}", flush=True)
+
             s = time.perf_counter()
-            ans, hit = infer_with_cache(p)
+            ans, hit = infer_with_cache(p)   # NOTE: on MISS this does cache_put(...)
             e = time.perf_counter()
             lat = (e - s) * 1000.0
 
+            if hit:
+                # Attribute saved recomputation cost for this prompt
+                total_cost_saved += cost_for_prompt(p)
+            else:
+                # MISS → a put just happened inside infer_with_cache; fetch the inserted id
+                new_id = pop_inserted_key()
+                if new_id is not None:
+                    record_mapping(p, int(new_id))
+                    observed = float(lat) if cost_metric == "latency_ms" else float(len(str(ans)) // 4)
+                    record_cost_by_id(int(new_id), observed)
+
             preview = (str(ans) or "")[:160].replace("\n", " ")
             print(f"[warm{r+1}] {idx}/{len(warm_order)} {'HIT' if hit else 'MISS'}  {lat:.1f} ms | {p!r} -> {preview}", flush=True)
-            
+
             rows.append({"prompt": p, "phase": f"warm{r+1}", "lat_ms": lat, "hit": int(hit)})
+
             if (idx % print_every == 0) or (idx == len(warm_order)):
                 print(f"[warm{r+1}] processed {ordinal(idx)} prompt ({idx}/{len(warm_order)})", flush=True)
+
 
     wall = time.time() - t0
     sampler.stop()
@@ -234,17 +278,21 @@ def main():
         "hit_rate": hit_all,
         "hit_rate_cold": hit_cold,
         "hit_rate_warm": hit_warm,
+        "cost_saved_total": round(total_cost_saved, 3),
     }
 
     df = pd.DataFrame(rows)
     detail_path = out_dir / "detail.csv"
+    detail_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(detail_path, index=False, encoding="utf-8")
 
     summary_path = out_dir / "summary.csv"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
     sdf = pd.DataFrame([meta])
     sdf.to_csv(summary_path, index=False, encoding="utf-8")
 
     sys_detail_path = out_dir / "sys_detail.csv"
+    sys_detail_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         sampler.to_dataframe().to_csv(sys_detail_path, index=False, encoding="utf-8")
     except Exception:

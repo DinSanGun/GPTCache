@@ -1,9 +1,10 @@
 from typing import Any, Callable, List, Optional, Iterator
 
 import cachetools
-
 from gptcache.manager.eviction.base import EvictionBase
-from gptcache.manager.eviction import cost_provider
+
+import heapq
+from gptcache.manager.eviction import cost_provider, cost_inbox
 
 
 def popitem_wrapper(func, wrapper_func, clean_size):
@@ -51,7 +52,7 @@ class MemoryCacheEviction(EvictionBase):
         elif self._policy == "RR":
             self._cache = cachetools.RRCache(maxsize=maxsize, **kwargs)
         elif self._policy == "COST_AWARE":
-            self._cache = CostAwareCache(maxsize=maxsize)
+            self._cache = CostAwareCache(maxsize=maxsize, **kwargs)
         else:
             raise ValueError(f"Unknown policy {policy}")
 
@@ -60,6 +61,12 @@ class MemoryCacheEviction(EvictionBase):
     def put(self, objs: List[Any]):
         for obj in objs:
             self._cache[obj] = True
+            # tell the bench which id was just inserted (no DB round-trip)
+            try:
+                cost_inbox.push(obj)
+            except Exception:
+                pass
+
 
     def get(self, obj: Any):
         return self._cache.get(obj)
@@ -67,33 +74,49 @@ class MemoryCacheEviction(EvictionBase):
     @property
     def policy(self) -> str:
         return self._policy
-    
+
 class CostAwareCache(cachetools.Cache):
     """
-    A tiny cachetools Cache variant that evicts the *cheapest to recompute* ids.
-    Stores only keys (GPTCache internal ids). Value is ignored (always True).
-    On overflow, popitem() returns the id with MIN(get_cost(id)).
+    Evicts the cheapest to recompute key using a min-heap of (cost, key).
+    Values are unused (stored as True); we still keep cachetools' size accounting.
     """
-    def __init__(self, maxsize: int):
-        super().__init__(maxsize=maxsize)
+    def __init__(self, maxsize: int, **kwargs):
+        super().__init__(maxsize=maxsize, getsizeof=kwargs.get("getsizeof"))
+        self._heap = []  # list[(float, Any)]
 
-    def __setitem__(self, key: Any, value: Any) -> None:
+    def __setitem__(self, key, value) -> None:
         super().__setitem__(key, value)
-        # cachetools will call popitem() while len(self) > maxsize
+        heapq.heappush(self._heap, (float(cost_provider.get_cost(key)), key))
+        # cachetools will call self.popitem() while currsize > maxsize
 
-    def popitem(self) -> tuple[Any, Any]:
+    def popitem(self):
         if not self._Cache__data:  # type: ignore[attr-defined]
             raise KeyError("%s is empty" % type(self).__name__)
-        # Choose the id with minimal cost
-        min_key: Optional[Any] = None
-        min_cost: float = float("inf")
-        # Iterate over current keys (ids)
-        for k in self._Cache__data.keys():  # type: ignore[attr-defined]
-            c = cost_provider.get_cost(k)
-            if c < min_cost:
-                min_cost, min_key = c, k
-        # Fallback: arbitrary pop if everything is inf/None
-        if min_key is None:
-            return self._Cache__data.popitem()  # type: ignore[attr-defined]
-        v = self._Cache__data.pop(min_key)     # type: ignore[attr-defined]
-        return (min_key, v)
+        # pull until we find a live key
+        while self._heap:
+            _, k = heapq.heappop(self._heap)
+            if k in self._Cache__data:  # type: ignore[attr-defined]
+                v = self._Cache__data.pop(k)  # type: ignore[attr-defined]
+                # keep cachetools' size accounting correct
+                getsizeof = getattr(self, "_Cache__getsizeof", None)
+                if callable(getsizeof):
+                    try:
+                        self._Cache__currsize -= max(1, int(getsizeof(v)))
+                    except Exception:
+                        self._Cache__currsize = len(self._Cache__data) 
+                else:
+                    self._Cache__currsize = len(self._Cache__data)
+
+                return (k, v)
+        # fallback if heap got out of sync
+        k, v = self._Cache__data.popitem()  # type: ignore[attr-defined]
+        getsizeof = getattr(self, "_Cache__getsizeof", None)
+        if callable(getsizeof):
+            try:
+                self._Cache__currsize -= max(1, int(getsizeof(v))) 
+            except Exception:
+                self._Cache__currsize = len(self._Cache__data)
+        else:
+            self._Cache__currsize = len(self._Cache__data)
+
+        return (k, v)

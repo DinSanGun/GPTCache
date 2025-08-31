@@ -6,6 +6,9 @@ from gptcache.processor.pre import get_prompt
 from gptcache.similarity_evaluation.distance import SearchDistanceEvaluation
 from gptcache.similarity_evaluation.exact_match import ExactMatchEvaluation
 
+from ..ext.cost_aware import install_cost_provider
+
+
 def init_cache(
     artifacts_dir: Path,
     cache_type: str = "semantic",      # "semantic" or "exact"
@@ -14,7 +17,9 @@ def init_cache(
     eviction: str = "LRU",
     similarity: str = "distance",      
     similarity_threshold: float = 0.05,
-    onnx_model: str | None = None
+    onnx_model: str | None = None,
+    cost_metric: str = "latency_ms",
+    cost_decay: float = 0.0
 ):
 
     artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -55,5 +60,8 @@ def init_cache(
         similarity_evaluation=evaluator,
         config=Config(similarity_threshold=thr),
     )
+    if eviction.upper() == "COST_AWARE":
+        install_cost_provider(metric=cost_metric, decay=cost_decay)
+
     print(f"[init] similarity={sim} thr={thr}")
 
