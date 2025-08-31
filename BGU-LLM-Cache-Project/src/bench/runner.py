@@ -1,5 +1,6 @@
+#runner.py
 from __future__ import annotations
-import argparse, json, time, random
+import argparse, json, time, random, os
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -14,8 +15,6 @@ from ..ext.cost_aware import record_mapping, record_cost_by_id, cost_for_prompt
 from gptcache.manager.eviction.cost_inbox import pop_last as pop_inserted_key
 
 
-
-
 def ordinal(n: int) -> str:
     if 10 <= (n % 100) <= 20:
         suffix = "th"
@@ -28,6 +27,16 @@ def load_config(path: Path) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+def _bool_from_env(s: str) -> bool:
+    return str(s).strip().lower() in ("1", "true", "yes", "on")
+
+def _deep_update(dst: dict, src: dict) -> dict:
+    for k, v in (src or {}).items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            _deep_update(dst[k], v)
+        else:
+            dst[k] = v
+    return dst
 
 def ensure_dirs(out_dir: Path, artifacts_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -44,17 +53,89 @@ def hit_rate_of(rows: List[Dict[str, Any]], phase_prefix: str | None = None) -> 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, help="YAML config path")
+    # Optional knobs YAML
+    ap.add_argument("--knobs", help="Optional YAML with overrides for cache/run/paths")
+    # CLI overrides (cache)
+    ap.add_argument("--eviction", help="LRU|FIFO|RR|COST_AWARE")
+    ap.add_argument("--max-size", type=int)
+    ap.add_argument("--clean-size", type=int)
+    ap.add_argument("--similarity", help="distance|distance_pos")
+    ap.add_argument("--sim-thr", type=float, help="similarity threshold")
+    ap.add_argument("--cost-metric", help="latency_ms|tokens")
+    ap.add_argument("--cost-decay", type=float)
+    # CLI overrides (run)
+    ap.add_argument("--prompts", type=int)
+    ap.add_argument("--warm-repeats", type=int)
+    ap.add_argument("--shuffle-warm", action="store_true")
+    ap.add_argument("--no-shuffle-warm", action="store_true")
+    ap.add_argument("--strict-cold", action="store_true")
+    ap.add_argument("--no-strict-cold", action="store_true")
+    # CLI overrides (paths)
+    ap.add_argument("--out-dir", help="Override output directory")
     args = ap.parse_args()
 
     cfg = load_config(Path(args.config))
 
+    # 1) knobs YAML (optional)
+    overrides_from_file: Dict[str, Any] = {}
+    if args.knobs:
+        with open(args.knobs, "r", encoding="utf-8") as f:
+            overrides_from_file = yaml.safe_load(f) or {}
+        _deep_update(cfg, overrides_from_file)
+
+    # 2) env var overrides (optional)
+    ENV_MAP = {
+        "CACHE_EVICTION":        ("cache", "eviction", str),
+        "CACHE_MAX_SIZE":        ("cache", "max_size", int),
+        "CACHE_CLEAN_SIZE":      ("cache", "clean_size", int),
+        "CACHE_SIMILARITY":      ("cache", "similarity", str),
+        "CACHE_SIMILARITY_THRESHOLD": ("cache", "similarity_threshold", float),
+        "CACHE_COST_METRIC":     ("cache", "cost_metric", str),
+        "CACHE_COST_DECAY":      ("cache", "cost_decay", float),
+        "RUN_PROMPTS":           ("run", "prompts", int),
+        "RUN_WARM_REPEATS":      ("run", "warm_repeats", int),
+        "RUN_SHUFFLE_WARM":      ("run", "shuffle_warm", _bool_from_env),
+        "RUN_STRICT_COLD":       ("run", "strict_cold", _bool_from_env),
+        "PATHS_OUT_DIR":         ("paths", "out_dir", str),
+    }
+    applied_env: Dict[str, Any] = {}
+    for env_key, (sec, key, cast) in ENV_MAP.items():
+        val = os.getenv(env_key)
+        if val is None:
+            continue
+        cfg.setdefault(sec, {})
+        try:
+            cfg[sec][key] = cast(val)
+            applied_env[env_key] = cfg[sec][key]
+        except Exception:
+            pass
+
+    # 3) CLI overrides (highest precedence)
+    cache_cfg = cfg.setdefault("cache", {})
+    run = cfg.setdefault("run", {})
+    paths = cfg.setdefault("paths", {})
+    if args.eviction:                cache_cfg["eviction"] = args.eviction
+    if args.max_size is not None:    cache_cfg["max_size"] = int(args.max_size)
+    if args.clean_size is not None:  cache_cfg["clean_size"] = int(args.clean_size)
+    if args.similarity:              cache_cfg["similarity"] = args.similarity
+    if args.sim_thr is not None:     cache_cfg["similarity_threshold"] = float(args.sim_thr)
+    if args.cost_metric:             cache_cfg["cost_metric"] = args.cost_metric
+    if args.cost_decay is not None:  cache_cfg["cost_decay"] = float(args.cost_decay)
+    if args.prompts is not None:     run["prompts"] = int(args.prompts)
+    if args.warm_repeats is not None: run["warm_repeats"] = int(args.warm_repeats)
+    if args.shuffle_warm:            run["shuffle_warm"] = True
+    if args.no_shuffle_warm:         run["shuffle_warm"] = False
+    if args.strict_cold:             run["strict_cold"] = True
+    if args.no_strict_cold:          run["strict_cold"] = False
+    if args.out_dir:                 paths["out_dir"] = args.out_dir
+
+    # Recompute locals from merged cfg
     mode = cfg.get("mode", "mock")
     cache_cfg = cfg.get("cache", {})
     paths = cfg.get("paths", {})
     run = cfg.get("run", {})
     metrics_cfg = cfg.get("metrics", {})
-    cost_metric = str(cfg.get("cache", {}).get("cost_metric", "latency_ms")).lower()
-
+    cost_metric = str(cache_cfg.get("cost_metric", "latency_ms")).lower()
 
     out_dir = Path(paths.get("out_dir", "results/run"))
     artifacts_dir = Path(paths.get("artifacts_dir", "results/artifacts"))
@@ -70,7 +151,6 @@ def main():
     print_every = int(metrics_cfg.get("print_every", 1))
     prompts_file = run.get("prompts_file")             # optional .txt path
     strict_cold = bool(run.get("strict_cold", True))
-
 
     # Init GPTCache (semantic adapter)
     if paths.get("reset_artifacts", False):
@@ -213,7 +293,6 @@ def main():
 
         rows.append({"prompt": p, "phase": "cold", "lat_ms": lat, "hit": int(hit)})
 
-
     # ---- WARM PASS(ES) ----
     for r in range(warm_repeats):
         warm_order = base_prompts[:]
@@ -249,7 +328,6 @@ def main():
             if (idx % print_every == 0) or (idx == len(warm_order)):
                 print(f"[warm{r+1}] processed {ordinal(idx)} prompt ({idx}/{len(warm_order)})", flush=True)
 
-
     wall = time.time() - t0
     sampler.stop()
     sys_summary = sampler.summarize()
@@ -267,6 +345,26 @@ def main():
         "cache": cache_cfg,
         "paths": paths,
         "run": run,
+        "overrides": {
+            "knobs_file": bool(overrides_from_file),
+            "env": applied_env,
+            "cli": {
+                "eviction": args.eviction,
+                "max_size": args.max_size,
+                "clean_size": args.clean_size,
+                "similarity": args.similarity,
+                "sim_thr": args.sim_thr,
+                "cost_metric": args.cost_metric,
+                "cost_decay": args.cost_decay,
+                "prompts": args.prompts,
+                "warm_repeats": args.warm_repeats,
+                "shuffle_warm": args.shuffle_warm,
+                "no_shuffle_warm": args.no_shuffle_warm,
+                "strict_cold": args.strict_cold,
+                "no_strict_cold": args.no_strict_cold,
+                "out_dir": args.out_dir,
+            },
+        },
         "sys_cpu_pct_mean": sys_summary.get("cpu_pct_mean", 0),
         "sys_cpu_pct_max": sys_summary.get("cpu_pct_max", 0),
         "sys_rss_mb_peak": sys_summary.get("rss_mb_peak", 0),

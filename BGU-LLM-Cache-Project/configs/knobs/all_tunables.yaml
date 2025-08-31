@@ -1,0 +1,29 @@
+cache:
+  # ---- policy & capacity ----
+  eviction: COST_AWARE        # LRU | FIFO | RR | COST_AWARE
+  max_size: 8                 # cache capacity (entries, unless a custom getsizeof is used)
+  clean_size: 1               # how many items to evict per overflow
+
+  # ---- similarity matching ----
+  similarity: distance        # distance | distance_pos
+  similarity_threshold: 0.98  # stricter => fewer matches (typical 0.95–0.99)
+
+  # ---- cost-aware knobs (used only when eviction=COST_AWARE) ----
+  cost_metric: latency_ms     # latency_ms | tokens
+  cost_decay: 0.10            # EMA smoothing for observed cost (0.0 = no decay)
+
+run:
+  # ---- workload shape ----
+  prompts: 50                 # number of base prompts to generate/use
+  warm_repeats: 1             # number of warm passes
+  shuffle_warm: true          # shuffle warm order to stress eviction
+  strict_cold: true           # cold pass seeds cache without hitting it
+
+  # prompt_prefix: "Q: "
+  # similar_every: 0          # 0 disables synthetic “similar” prompts
+  # similar_suffix: " please"
+  prompts_file: "data/prompts_mixed.txt"
+
+paths:
+  # Where run artifacts (CSVs) go; use a unique folder per experiment.
+  out_dir: results/knobs/all_tunables_example
