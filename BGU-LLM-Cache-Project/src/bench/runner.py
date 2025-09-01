@@ -1,6 +1,6 @@
 #runner.py
 from __future__ import annotations
-import argparse, json, time, random, os
+import argparse, json, time, random, os, hashlib
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -152,6 +152,29 @@ def main():
     prompts_file = run.get("prompts_file")             # optional .txt path
     strict_cold = bool(run.get("strict_cold", True))
 
+
+    # ------ For cost aware testing --------------
+
+    mock_lat_cfg = cfg.get("run", {}).get("mock_latency", {}) or {}
+    LAT_PROFILE = str(mock_lat_cfg.get("profile", os.getenv("MOCK_LAT_PROFILE", "off"))).lower()
+    LAT_HI_MS = int(mock_lat_cfg.get("hi_ms", os.getenv("MOCK_LAT_HI_MS", "1200")))
+    LAT_LO_MS = int(mock_lat_cfg.get("lo_ms", os.getenv("MOCK_LAT_LO_MS", "80")))
+    LAT_HI_FRAC = float(mock_lat_cfg.get("hi_frac", os.getenv("MOCK_LAT_HI_FRAC", "0.30")))
+    LAT_JITTER_MS = int(mock_lat_cfg.get("jitter_ms", os.getenv("MOCK_LAT_JITTER_MS", "20")))
+
+    def _synthetic_delay_ms_for(prompt: str) -> int:
+        if LAT_PROFILE != "bimodal": return 0
+        h = int(hashlib.sha1(prompt.encode("utf-8")).hexdigest(), 16) % 100
+        is_hi = h < int(LAT_HI_FRAC * 100)
+        base = LAT_HI_MS if is_hi else LAT_LO_MS
+        jitter = 0 if LAT_JITTER_MS <= 0 else (h % (LAT_JITTER_MS + 1))
+        return max(0, base + jitter)
+
+    def _apply_synth_delay(prompt: str):
+        d = _synthetic_delay_ms_for(prompt)
+        if d > 0: time.sleep(d / 1000.0)
+
+
     # Init GPTCache (semantic adapter)
     if paths.get("reset_artifacts", False):
         import shutil
@@ -179,6 +202,7 @@ def main():
 
         def infer_raw(prompt: str) -> str:
             # call the model directly (no cache get/put)
+            _apply_synth_delay(prompt)
             return llm.generate(prompt)
 
         def infer_with_cache(prompt: str):

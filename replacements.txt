@@ -1,0 +1,9 @@
+# OpenAI keys like sk-...
+regex:\bsk-[A-Za-z0-9]{20,}\b==>sk-REDACTED
+
+# GitHub classic/fine-grained tokens
+regex:\bghp_[A-Za-z0-9]{20,}\b==>ghp_REDACTED
+regex:\bgithub_pat_[A-Za-z0-9_]{20,}\b==>github_pat_REDACTED
+
+# Hugging Face tokens
+regex:\bhf_[A-Za-z0-9]{20,}\b==>hf_REDACTED
