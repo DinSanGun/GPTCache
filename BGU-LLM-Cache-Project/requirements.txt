@@ -1,6 +1,10 @@
+
 pandas>=2.0
 psutil>=5.9
 PyYAML>=6.0
 matplotlib>=3.7
 requests>=2.31
 pytest>=7.4
+# Optional for semantic/real:
+ onnxruntime>=1.18.0    # needed for SEMANTIC mode (ONNX embeddings)
+ faiss-cpu>=1.7.4       # Linux/macOS only; Windows users prefer WSL

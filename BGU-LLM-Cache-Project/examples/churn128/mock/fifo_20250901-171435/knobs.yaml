@@ -1,0 +1,8 @@
+paths:
+  out_dir: C:/dev/LLM-Caching/GPTCache/BGU-LLM-Cache-Project/results/suite/mock_semantic/churn128/mock/fifo_20250901-171435
+  artifacts_dir: C:/dev/LLM-Caching/GPTCache/BGU-LLM-Cache-Project/results/suite/mock_semantic/churn128/mock/fifo_20250901-171435/artifacts
+  reset_artifacts: true
+run:
+  prompts_file: C:/dev/LLM-Caching/GPTCache/BGU-LLM-Cache-Project/data/lmsys_user_prompts_heavy.txt
+  shuffle_warm: true
+  strict_cold: true

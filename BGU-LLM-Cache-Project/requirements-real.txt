@@ -1,2 +1,0 @@
-# Extra deps for real mode if needed (Ollama via HTTP uses 'requests' already)
-# openai>=1.40.0

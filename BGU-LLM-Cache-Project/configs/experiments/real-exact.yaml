@@ -1,0 +1,25 @@
+
+mode: ollama
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3.2:1b"
+  timeout_s: 120
+  keep_alive: "1m"
+  options:
+    num_ctx: 1024
+    num_predict: 128
+cache:
+  type: exact
+  eviction: LRU
+  max_size: 4
+  clean_size: 2
+  similarity: distance       
+paths:
+  artifacts_dir: results/real-exact
+  reset_artifacts: true
+run:
+  strict_cold: true
+  prompts_file: "data/prompts_mixed.txt"
+  warm_repeats: 1
+  shuffle_warm: true
