@@ -1,0 +1,25 @@
+paths:
+  out_dir: results/knobs/costaware_showcase
+  artifacts_dir: results/knobs/costaware_showcase/artifacts
+  reset_artifacts: true
+
+cache:
+  type: semantic
+  max_size: 4
+  clean_size: 1
+  similarity: distance
+  similarity_threshold: 0.98
+  cost_metric: latency_ms
+  cost_decay: 0.0
+
+run:
+  prompts_file: "data/lmsys_user_prompts.txt"
+  strict_cold: true
+  shuffle_warm: true
+  warm_repeats: 1
+  mock_latency:
+    profile: bimodal
+    hi_ms: 1200
+    lo_ms: 80
+    hi_frac: 0.30
+    jitter_ms: 20

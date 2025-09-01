@@ -209,6 +209,7 @@ def main():
             cached = cache_get(prompt)
             if cached is not None:
                 return str(cached), True
+            _apply_synth_delay(prompt)       # only on MISS
             ans = llm.generate(prompt)
             cache_put(prompt, ans)
             return ans, False
