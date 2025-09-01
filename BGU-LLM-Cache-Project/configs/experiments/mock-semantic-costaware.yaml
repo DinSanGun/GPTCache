@@ -1,0 +1,30 @@
+mode: mock
+
+paths:
+  out_dir: results/suite/mock_semantic
+  artifacts_dir: results/suite/mock_semantic/artifacts
+  reset_artifacts: true
+
+cache:
+  type: semantic
+  eviction: FIFO           # overridden per run
+  max_size: 64
+  clean_size: 1
+  similarity: distance
+  similarity_threshold: 0.98
+  cost_metric: latency_ms
+  cost_decay: 0.0
+
+run:
+  prompts_file: "data/lmsys_user_prompts_expbiased_60k.txt"
+  strict_cold: true
+  shuffle_warm: true
+  warm_repeats: 1
+
+  # We keep a *smaller* synthetic skew so embeddings don’t dominate total time.
+  mock_latency:
+    profile: bimodal
+    hi_ms: 8
+    lo_ms: 1
+    hi_frac: 0.30
+    jitter_ms: 2

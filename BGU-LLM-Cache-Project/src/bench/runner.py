@@ -25,15 +25,23 @@ def ordinal(n: int) -> str:
 
 def load_config(path: Path) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Config {path} must be a YAML mapping, got {type(data).__name__}")
+    return data
 
 def _bool_from_env(s: str) -> bool:
     return str(s).strip().lower() in ("1", "true", "yes", "on")
 
-def _deep_update(dst: dict, src: dict) -> dict:
-    for k, v in (src or {}).items():
+def deep_merge(dst: Dict[str, Any] | None, src: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Return dst updated recursively by src. Handles None safely."""
+    if not isinstance(dst, dict):
+        dst = {}
+    if not isinstance(src, dict):
+        return dst
+    for k, v in src.items():
         if isinstance(v, dict) and isinstance(dst.get(k), dict):
-            _deep_update(dst[k], v)
+            dst[k] = deep_merge(dst[k], v)
         else:
             dst[k] = v
     return dst
@@ -77,11 +85,12 @@ def main():
     cfg = load_config(Path(args.config))
 
     # 1) knobs YAML (optional)
-    overrides_from_file: Dict[str, Any] = {}
-    if args.knobs:
-        with open(args.knobs, "r", encoding="utf-8") as f:
-            overrides_from_file = yaml.safe_load(f) or {}
-        _deep_update(cfg, overrides_from_file)
+    overrides_from_file = None
+    if hasattr(args, "knobs") and args.knobs:
+        overrides_from_file = load_config(Path(args.knobs))
+
+    cfg = deep_merge(cfg, overrides_from_file)
+
 
     # 2) env var overrides (optional)
     ENV_MAP = {
