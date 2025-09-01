@@ -277,6 +277,7 @@ Tips:
 - Project (this fork): https://github.com/DinSanGun/GPTCache  
 - Original GPTCache: https://github.com/zilliztech/GPTCache  
 - LMSYS-Chat-1M dataset: https://huggingface.co/datasets/lmsys/lmsys-chat-1m
+- Previous version of this project (different approach): https://github.com/rulidor/llm_cache_project
 
 ---
 
