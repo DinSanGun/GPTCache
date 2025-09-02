@@ -1,32 +1,32 @@
 
 # Cost-Aware Eviction in GPTCache — Benchmark & Policy Repo
 
-This repository contains a **reproducible benchmark harness** and a **Cost-Aware eviction policy** extension for GPTCache.
+This repository contains a **reproducible benchmark** and a **Cost-Aware eviction policy** extension for GPTCache.
 It supports **EXACT** and **SEMANTIC** cache modes, **mock** and **real (Ollama)** backends, and logs structured results
-for analysis (CSV + YAML knobs). The repo is designed to live **inside a GPTCache clone** so local edits to GPTCache affect runs.
+for analysis (CSV + YAML). The repo is designed to live **inside a GPTCache clone** so local edits to GPTCache affect runs.
 
 ---
 
 ## Highlights
 
-- ✅ **Cost-Aware eviction**: preserves items with higher recomputation cost (measured on cold pass).
-- ✅ **Mock + Real** backends: synthetic latency model + local **Ollama** smoke tests.
+- ✅ **Cost-Aware eviction**: preserves items with higher recomputation cost
+- ✅ **Mock + Real** backends: synthetic latency model + local **Ollama** performance tests.
 - ✅ **Reproducible outputs**: per-run `summary.csv`, `detail.csv`, `knobs.yaml`, `sys_detail.csv` in `results/`.
-- ✅ **Unit tests**: policy behavior, cost-provider wiring, and runner smoke tests.
-- ✅ **Docker**: build & run mock or real smoke in a container.
-- ✅ **CI**: GitHub Actions workflow for lint + tests (+ optional mock smoke).
+- ✅ **Unit tests**: policy behavior, cost-provider wiring, and smoke tests.
+- ✅ **Dockerfile**: build & run mock or real mode in a container.
+- ✅ **CI**: GitHub Actions workflow for lint + tests.
 
 ---
 
 ## Why GPTCache as the Baseline
 
 We chose GPTCache because of its maturity and modular design, active community, and clean extension points:
-- **Maturity & activity** — healthy GitHub signals; maintained docs & examples.
-- **Adapters & compatibility** — OpenAI- and LangChain-style adapters; easy to point to **Ollama**.
-- **Exact & semantic** — interchangeable vector stores (FAISS/Milvus) for realistic paraphrase hits.
+- **Maturity & activity** — healthy GitHub stats. Maintained docs & examples.
+- **Adapters & compatibility** — OpenAI and LangChain-style adapters. easy to integrate with **Ollama** framework.
+- **Exact \ semantic** — interchangeable vector stores (FAISS) for realistic paraphrase (semantic) hits.
 - **In-memory eviction via `cachetools`** — minimal surface-area changes to swap/extend policies.
 
-These attributes minimized framework plumbing and let us focus on policy research.
+These attributes minimized framework modifications and adaptation and let us focus on policy research.
 
 ---
 
@@ -54,15 +54,12 @@ These attributes minimized framework plumbing and let us focus on policy researc
 │   ├── bench/                   # runner, metrics, cache init, plotting
 │   └── ext/                     # Cost-Aware policy + tests
 ├── tools/                       # CLI: bench, dataset preprocess, plotting helpers
-├── results/                     # run outputs (artifacts + CSVs) — gitignored
+├── results/                     # run outputs - artifacts + CSVs. (gitignored)
 ├── docker/                      # Dockerfile + entrypoint
 ├── .github/workflows/           # CI workflow (GitHub Actions)
-├── requirements.txt             # core deps (mock + analysis)
+├── requirements.txt             # core deps 
 └── pytest.ini
 ```
-
-**Important:** `results/`, `__pycache__/`, `.pytest_cache/`, `*.db`, `*.index`, `*.faiss` are **gitignored**.
-
 ---
 
 ## Installation
@@ -258,29 +255,14 @@ Tips:
 
 ---
 
-## Refactor & Cleanup Checklist
-
-- [ ] **Remove committed run outputs**: delete `results/` contents; keep the folder (gitignored).
-- [ ] **Delete `.pytest_cache/` and `__pycache__/`** if present.
-- [ ] **Move scratch scripts** (`src/quicktest.py`) to `examples/` or delete if obsolete.
-- [ ] Ensure consistent naming: `mock-exact.yaml`, `mock-semantic.yaml`, `real-exact.yaml`, `ollama-semantic.yaml`.
-- [ ] Add `reset_state()` in `src/ext/cost_aware.py` (to clear cost maps for tests).
-- [ ] Wrap cost maps with a `threading.Lock()` if multi-threaded runs are expected.
-- [ ] Keep *policy selection* in configs/CLI only; avoid hardcoding in code.
-- [ ] Add docstrings to `src/bench/runner.py` CLI and `tools/bench_policies.py`.
-- [ ] Pin optional versions for reproducibility in Docker or lock files.
-
----
-
 ## References & Links
 
 - Project (this fork): https://github.com/DinSanGun/GPTCache  
 - Original GPTCache: https://github.com/zilliztech/GPTCache  
 - LMSYS-Chat-1M dataset: https://huggingface.co/datasets/lmsys/lmsys-chat-1m
-- Previous version of this project (different approach): https://github.com/rulidor/llm_cache_project
 
 ---
 
 ## License
 
-This repository builds on GPTCache. See original project license for details; any new code here inherits the same license unless otherwise stated.
+This repository builds on GPTCache. See original project license for details.
